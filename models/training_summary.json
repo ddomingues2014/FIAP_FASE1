@@ -1,0 +1,75 @@
+{
+  "best_model_name": "Regressão logística",
+  "shap_model_name": "Regressão logística",
+  "overview": {
+    "n_samples": 569,
+    "n_features": 30,
+    "n_malignant": 212,
+    "n_benign": 357,
+    "malignant_rate": 0.37258347978910367,
+    "missing_values": 0,
+    "feature_names": [
+      "mean_radius",
+      "mean_texture",
+      "mean_perimeter",
+      "mean_area",
+      "mean_smoothness",
+      "mean_compactness",
+      "mean_concavity",
+      "mean_concave_points",
+      "mean_symmetry",
+      "mean_fractal_dimension",
+      "radius_error",
+      "texture_error",
+      "perimeter_error",
+      "area_error",
+      "smoothness_error",
+      "compactness_error",
+      "concavity_error",
+      "concave_points_error",
+      "symmetry_error",
+      "fractal_dimension_error",
+      "worst_radius",
+      "worst_texture",
+      "worst_perimeter",
+      "worst_area",
+      "worst_smoothness",
+      "worst_compactness",
+      "worst_concavity",
+      "worst_concave_points",
+      "worst_symmetry",
+      "worst_fractal_dimension"
+    ],
+    "source": "UCI Breast Cancer Wisconsin Diagnostic (sklearn)",
+    "kaggle_equivalent": "https://www.kaggle.com/datasets/uciml/breast-cancer-wisconsin-data/data"
+  },
+  "search_info": {
+    "Regressão logística": {
+      "best_params": {
+        "model__C": 1.0,
+        "model__penalty": "l2",
+        "model__solver": "lbfgs"
+      },
+      "best_cv_recall": 0.9588235294117646
+    },
+    "Random Forest": {
+      "best_params": {
+        "model__max_depth": 8,
+        "model__min_samples_split": 2,
+        "model__n_estimators": 250
+      },
+      "best_cv_recall": 0.9529411764705882
+    },
+    "KNN": {
+      "best_params": {
+        "model__n_neighbors": 3,
+        "model__weights": "uniform"
+      },
+      "best_cv_recall": 0.9352941176470588
+    }
+  },
+  "shap_local_indices": {
+    "maligno": 250,
+    "benigno": 120
+  }
+}

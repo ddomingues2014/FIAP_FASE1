@@ -1,0 +1,289 @@
+<!DOCTYPE html><html lang='pt-BR'><head><meta charset='utf-8'><title>Relatório técnico — IADT Fase 1</title><style>body{font-family:DejaVu Sans,sans-serif;max-width:900px;margin:2rem auto;line-height:1.45} img{max-width:100%;height:auto}table{border-collapse:collapse;width:100%} td,th{border:1px solid #ccc;padding:.4rem;text-align:left}</style></head><body><h1>Relatório técnico — Tech Challenge IADT Fase 1</h1>
+<p><strong>Tema:</strong> sistema inteligente de suporte ao diagnóstico e detecção de riscos em saúde da mulher<br />
+<strong>Recorte desta fase:</strong> classificação de câncer de mama (maligno vs. benigno) com Machine Learning tabular<br />
+<strong>Dataset:</strong> Breast Cancer Wisconsin Diagnostic (UCI), equivalente ao <a href="https://www.kaggle.com/datasets/uciml/breast-cancer-wisconsin-data/data">conjunto sugerido no Kaggle</a><br />
+<strong>Repositório Git:</strong> <em>(inserir URL após o push)</em><br />
+<strong>Repositório Git:</strong> <em>(inserir URL após o push)</em></p>
+<hr />
+<h2>1. Problema e objetivo</h2>
+<p>Uma rede de hospitais e centros especializados no atendimento à mulher precisa acelerar a triagem de risco. O enunciado da Fase 1 pede a <strong>base de um sistema de IA</strong> com foco em Machine Learning: analisar dados médicos automaticamente para identificar padrões relacionados à segurança e à saúde feminina.</p>
+<p>Escolhemos o <strong>diagnóstico de câncer de mama</strong> a partir de 30 atributos numéricos extraídos de imagens digitais de núcleos celulares no exame FNA (<em>fine needle aspirate</em>). A tarefa é binária:</p>
+<table>
+<thead>
+<tr>
+<th>Classe</th>
+<th>Código usado no projeto</th>
+<th>Significado clínico</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Positiva</td>
+<td>1</td>
+<td>Maligno</td>
+</tr>
+<tr>
+<td>Negativa</td>
+<td>0</td>
+<td>Benigno</td>
+</tr>
+</tbody>
+</table>
+<p>O sistema <strong>não emite diagnóstico final</strong>. Ele calcula uma probabilidade e uma explicação (SHAP) para apoiar o profissional. A palavra final é sempre do médico.</p>
+<p>O enunciado também cita sinais de violência doméstica em prontuários. Esse recorte exigiria NLP sobre texto clínico e ficou <strong>fora do escopo da Fase 1</strong>, que prioriza classificação tabular bem documentada, métricas e explicabilidade.</p>
+<hr />
+<h2>2. Dados</h2>
+<h3>2.1 Fonte</h3>
+<ul>
+<li>Carregamento reprodutível: <code>sklearn.datasets.load_breast_cancer</code></li>
+<li>Mesma origem UCI do CSV do Kaggle (colunas <code>id</code> / <code>Unnamed: 32</code> do Kaggle não entram, pois o sklearn já entrega só as 30 features clínicas)</li>
+<li>569 amostras, 30 features contínuas, 0 valores ausentes na versão sklearn</li>
+</ul>
+<p>As features descrevem estatísticas <strong>mean</strong>, <strong>error</strong> (desvio padrão) e <strong>worst</strong> (média dos três maiores valores) de dez medidas nucleares: raio, textura, perímetro, área, suavidade, compacidade, concavidade, pontos côncavos, simetria e dimensão fractal.</p>
+<p>O rótulo original do sklearn é invertido em relação à intuição clínica (<code>0 = malignant</code>). Remapeamos para <strong>1 = maligno</strong>, de modo que recall/F1 da classe positiva correspondam ao risco que queremos detectar.</p>
+<h3>2.2 Visão geral</h3>
+<ul>
+<li>Benignos: 357 (~62,7%)</li>
+<li>Malignos: 212 (~37,3%)</li>
+<li>Desbalanceamento moderado — accuracy sozinha mascara erros na classe rara/crítica</li>
+</ul>
+<p><img src="/home/lucas/tech_fiap/reports/figures/eda_class_balance.png" width="720" alt="Balanceamento das classes"></p>
+
+<hr />
+<h2>3. Exploração de dados (EDA)</h2>
+<h3>3.1 Estatísticas descritivas e padrões clínicos</h3>
+<p>Tumores malignos tendem a apresentar <strong>maior raio, perímetro, área e concavidade</strong>. Isso é coerente com a literatura do FNA: núcleos maiores e mais irregulares associam-se a malignidade.</p>
+<p><img src="/home/lucas/tech_fiap/reports/figures/eda_boxplots_key_features.png" width="720" alt="Boxplots das features clínicas"></p>
+
+<p>As distribuições condicionais mostram sobreposição (nem todo núcleo grande é maligno), mas a massa de probabilidade do grupo maligno desloca-se à direita em <code>mean_radius</code>, <code>mean_concave_points</code>, <code>worst_area</code> e <code>worst_concave_points</code>.</p>
+<p><img src="/home/lucas/tech_fiap/reports/figures/eda_histograms_key_features.png" width="720" alt="Histogramas das features-chave"></p>
+
+<h3>3.2 Correlação e colinearidade</h3>
+<p>Raio, perímetro e área são quase colineares (perímetro ≈ 2πr e área ≈ πr² em núcleos aproximadamente circulares). O mesmo vale para as versões <em>worst</em>.</p>
+<p><img src="/home/lucas/tech_fiap/reports/figures/eda_correlation_key.png" width="720" alt="Correlação entre features clínicas"></p>
+
+<p><img src="/home/lucas/tech_fiap/reports/figures/eda_correlation_full.png" width="720" alt="Matriz de correlação completa"></p>
+
+<p><img src="/home/lucas/tech_fiap/reports/figures/eda_scatter_radius.png" width="720" alt="Scatter raio médio vs. pior raio"></p>
+
+<p><strong>Decisão:</strong> manter as 30 features originais. O enunciado pede pipeline de pré-processamento e análise de correlação, não necessariamente redução dimensional. Regularização L2 na logística e o ensemble do Random Forest lidam com colinearidade de forma aceitável neste tamanho de amostra. PCA ficou como melhoria futura, não como etapa obrigatória.</p>
+<hr />
+<h2>4. Pré-processamento</h2>
+<p>Estratégia implementada em <code>src/preprocess.py</code>, sempre <strong>dentro de um <code>sklearn.Pipeline</code></strong>, para não vazar estatísticas do teste:</p>
+<ol>
+<li><strong>Limpeza:</strong> na versão sklearn não há missing. Ainda assim usamos <code>SimpleImputer(strategy="median")</code> para documentar o tratamento exigido e para tolerar o CSV do Kaggle (que traz coluna vazia <code>Unnamed: 32</code>).</li>
+<li><strong>Tipos:</strong> todas as features já são numéricas contínuas; o alvo foi binarizado (maligno = 1).</li>
+<li><strong>Escala:</strong> <code>StandardScaler</code>. Obrigatório para KNN (distância euclidiana) e recomendado para regressão logística. Árvores não precisam de escala, mas o mesmo pré-processamento deixa a comparação justa.</li>
+<li><strong>Split:</strong> <code>train_test_split(test_size=0.20, stratify=y, random_state=42)</code> — 80/20 com a mesma proporção maligno/benigno nos dois conjuntos.</li>
+</ol>
+<p>Não houve encoding categórico. Não removemos outliers agressivamente: valores extremos de área/raio são sinal clínico, não necessariamente erro de digitação.</p>
+<hr />
+<h2>5. Modelagem</h2>
+<p>Treinamos <strong>três</strong> classificadores com <code>GridSearchCV</code> (5 folds estratificados) otimizando <strong>recall</strong> da classe positiva:</p>
+<table>
+<thead>
+<tr>
+<th>Modelo</th>
+<th>Motivação</th>
+<th>Hiperparâmetros buscados</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Regressão logística</strong></td>
+<td>Baseline clínico, coeficientes interpretáveis, <code>class_weight="balanced"</code></td>
+<td><code>C ∈ {0.1, 1, 10}</code></td>
+</tr>
+<tr>
+<td><strong>Random Forest</strong></td>
+<td>Relações não lineares + importância nativa de features</td>
+<td><code>n_estimators</code>, <code>max_depth</code>, <code>min_samples_split</code></td>
+</tr>
+<tr>
+<td><strong>KNN</strong></td>
+<td>Terceiro algoritmo simples e didático; muito sensível à escala</td>
+<td><code>n_neighbors</code>, <code>weights</code></td>
+</tr>
+</tbody>
+</table>
+<p>O modelo de produção da demo é o de <strong>maior recall maligno</strong> no teste, com desempate em F1 e ROC-AUC (<code>src/train.py</code>).</p>
+<hr />
+<h2>6. Treinamento, métricas e interpretação</h2>
+<h3>6.1 Por que essas métricas?</h3>
+<p>No câncer, <strong>falso negativo</strong> (maligno predito como benigno) atrasa biópsia e tratamento. Por isso:</p>
+<ol>
+<li><strong>Recall maligno</strong> — métrica principal (sensibilidade)</li>
+<li><strong>F1 maligno</strong> — equilíbrio com precisão (falsos positivos geram ansiedade e exames extras, mas o custo é menor que o FN)</li>
+<li><strong>Matriz de confusão</strong> — deixa FN/FP explícitos</li>
+<li><strong>Accuracy</strong> — reportada com crítica (classe majoritária benigna)</li>
+<li><strong>ROC-AUC / PR-AUC</strong> — qualidade do ranking das probabilidades</li>
+</ol>
+<p>Resultados no conjunto de teste (split 80/20 estratificado, <code>random_state=42</code>):</p>
+<table>
+<thead>
+<tr>
+<th>Modelo</th>
+<th style="text-align: right;">Accuracy</th>
+<th style="text-align: right;">Recall maligno</th>
+<th style="text-align: right;">Precision maligno</th>
+<th style="text-align: right;">F1 maligno</th>
+<th style="text-align: right;">ROC-AUC</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Regressão logística</td>
+<td style="text-align: right;">0.974</td>
+<td style="text-align: right;"><strong>0.952</strong></td>
+<td style="text-align: right;">0.976</td>
+<td style="text-align: right;">0.964</td>
+<td style="text-align: right;">0.995</td>
+</tr>
+<tr>
+<td>Random Forest</td>
+<td style="text-align: right;">0.974</td>
+<td style="text-align: right;">0.929</td>
+<td style="text-align: right;">1.000</td>
+<td style="text-align: right;">0.963</td>
+<td style="text-align: right;">0.998</td>
+</tr>
+<tr>
+<td>KNN</td>
+<td style="text-align: right;">0.939</td>
+<td style="text-align: right;">0.857</td>
+<td style="text-align: right;">0.973</td>
+<td style="text-align: right;">0.911</td>
+<td style="text-align: right;">0.983</td>
+</tr>
+</tbody>
+</table>
+<p>A <strong>regressão logística</strong> foi escolhida para a demo: maior recall da classe maligna (métrica principal). O Random Forest empata em accuracy e tem ROC-AUC ligeiramente maior, mas deixa passar mais falsos negativos. O KNN fica atrás, como esperado em um espaço com colinearidade.</p>
+<p>Hiperparâmetros via <code>GridSearchCV</code> (5 folds, scoring = recall): logística <code>C=1.0</code>; RF <code>n_estimators=250</code>, <code>max_depth=8</code>; KNN <code>k=3</code>, <code>weights=uniform</code>.</p>
+<p><img src="/home/lucas/tech_fiap/reports/figures/metrics_comparison.png" width="720" alt="Comparação de métricas"></p>
+
+<p><img src="/home/lucas/tech_fiap/reports/figures/roc_curves.png" width="720" alt="Curvas ROC"></p>
+
+<p><img src="/home/lucas/tech_fiap/reports/figures/confusion_regressao_logistica.png" width="720" alt="Matriz — regressão logística"></p>
+
+<p><img src="/home/lucas/tech_fiap/reports/figures/confusion_random_forest.png" width="720" alt="Matriz — Random Forest"></p>
+
+<p><img src="/home/lucas/tech_fiap/reports/figures/confusion_knn.png" width="720" alt="Matriz — KNN"></p>
+
+<p>Os números exatos da última execução estão em <code>models/metrics.json</code> e <code>models/metrics_table.csv</code>. O app Streamlit e <code>python -m src.train</code> exibem a tabela atualizada.</p>
+<h3>6.2 Leitura crítica dos resultados</h3>
+<p>Espera-se accuracy e ROC-AUC altos neste dataset clássico — ele é relativamente linearmente separável. Isso <strong>não</strong> significa prontidão clínica:</p>
+<ul>
+<li>Uma única origem (Wisconsin), ~569 casos, sem validação temporal nem multicêntrica</li>
+<li>Features de laboratório já “limpas”, muito diferentes de um prontuário real</li>
+<li>Risco de superestimar generalização (mesmo com split estratificado e CV)</li>
+</ul>
+<p>Um modelo utilizável na triagem deveria ser calibrado no hospital de destino, monitorado para <em>drift</em> e sempre revisado por um médico.</p>
+<hr />
+<h2>7. Explicabilidade</h2>
+<h3>7.1 Feature importance</h3>
+<ul>
+<li><strong>Random Forest:</strong> impureza (Gini) — em geral destacam <code>worst_concave_points</code>, <code>worst_area</code>, <code>mean_concave_points</code>, <code>worst_radius</code></li>
+<li><strong>Regressão logística:</strong> valor absoluto dos coeficientes <strong>após</strong> o <code>StandardScaler</code> (comparáveis entre si)</li>
+</ul>
+<p><img src="/home/lucas/tech_fiap/reports/figures/feature_importance_regressao_logistica.png" width="720" alt="Importância — regressão logística"></p>
+
+<p><img src="/home/lucas/tech_fiap/reports/figures/feature_importance_random_forest.png" width="720" alt="Importância — Random Forest"></p>
+
+<h3>7.2 SHAP</h3>
+<p>Usamos SHAP no modelo interpretável selecionado (árvore ou logística; se o melhor for KNN, o SHAP recai no Random Forest).</p>
+<ul>
+<li><strong>Global (beeswarm):</strong> quais features mais empurram a predição para maligno no conjunto de teste</li>
+<li><strong>Local (waterfall):</strong> um caso maligno e um benigno, úteis na demo e no vídeo</li>
+</ul>
+<p><img src="/home/lucas/tech_fiap/reports/figures/shap_summary_regressao_logistica.png" width="720" alt="SHAP global"></p>
+
+<p><img src="/home/lucas/tech_fiap/reports/figures/shap_waterfall_regressao_logistica_caso_maligno.png" width="720" alt="SHAP local — caso maligno"></p>
+
+<p><img src="/home/lucas/tech_fiap/reports/figures/shap_waterfall_regressao_logistica_caso_benigno.png" width="720" alt="SHAP local — caso benigno"></p>
+
+<p>Nesta execução o melhor modelo (e o usado no SHAP) foi a <strong>regressão logística</strong>. Se uma nova rodada escolher o Random Forest, os arquivos terão o prefixo <code>shap_*_random_forest.png</code>.</p>
+<p>Interpretação para o clínico: barras que aumentam o valor SHAP elevam a probabilidade de <strong>maligno</strong>. O waterfall parte do valor base (média do modelo) e soma as contribuições até a predição do caso.</p>
+<hr />
+<h2>8. Uso prático e ética</h2>
+<p><strong>Pode ser usado na prática?</strong> Como <strong>apoio à triagem / segunda opinião quantitativa</strong>, em ambiente controlado, sim. Como diagnóstico automático, <strong>não</strong>.</p>
+<p>Como usaria um hospital, em tese:</p>
+<ol>
+<li>Laboratório informa as 30 medidas do FNA</li>
+<li>O sistema devolve probabilidade de malignidade + SHAP local</li>
+<li>O médico cruza com exame físico, imagem e biópsia</li>
+<li>Casos de alta probabilidade sobem na fila de revisão</li>
+</ol>
+<p>Salvaguardas:</p>
+<ul>
+<li>Disclaimer visível no app</li>
+<li>Médico no loop (human-in-the-loop)</li>
+<li>Sem dados pessoais no repositório (dataset público e anônimo)</li>
+<li>Sem pretensão de cobrir violência doméstica nesta fase</li>
+<li>CNN em mamografia (EXTRA do enunciado) ficou de fora, para concentrar a entrega no pipeline tabular</li>
+</ul>
+<hr />
+<h2>9. Organização do código</h2>
+<table>
+<thead>
+<tr>
+<th>Caminho</th>
+<th>Papel</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/data.py</code></td>
+<td>Carga Wisconsin + split estratificado</td>
+</tr>
+<tr>
+<td><code>src/preprocess.py</code></td>
+<td>Pipeline imputer + scaler</td>
+</tr>
+<tr>
+<td><code>src/eda.py</code></td>
+<td>Figuras de exploração</td>
+</tr>
+<tr>
+<td><code>src/train.py</code></td>
+<td>GridSearch, persistência, escolha do melhor modelo</td>
+</tr>
+<tr>
+<td><code>src/evaluate.py</code></td>
+<td>Métricas e gráficos de desempenho</td>
+</tr>
+<tr>
+<td><code>src/explain.py</code></td>
+<td>Feature importance + SHAP</td>
+</tr>
+<tr>
+<td><code>app/streamlit_app.py</code></td>
+<td>Demo (predição + análise)</td>
+</tr>
+<tr>
+<td><code>scripts/explore.py</code></td>
+<td>EDA + discussão no terminal (vídeo)</td>
+</tr>
+<tr>
+<td><code>scripts/export_figures.py</code></td>
+<td>Regenera todos os prints</td>
+</tr>
+<tr>
+<td><code>Dockerfile</code></td>
+<td>Ambiente reproduzível da demo</td>
+</tr>
+</tbody>
+</table>
+<p>Execução: ver <code>README.md</code>.</p>
+<hr />
+<h2>10. Vídeo de demonstração (roteiro ≤ 15 min)</h2>
+<p>Checklist para gravação (YouTube ou Vimeo, público ou não listado):</p>
+<ol>
+<li><strong>(1–2 min)</strong> Contexto do hospital + recorte Wisconsin + disclaimer</li>
+<li><strong>(3 min)</strong> <code>python scripts/explore.py</code>: EDA, balanceamento, boxplots, correlação</li>
+<li><strong>(4 min)</strong> Pipeline, os três modelos, métricas (ênfase em recall) e SHAP</li>
+<li><strong>(4 min)</strong> Streamlit ao vivo: caso maligno, caso benigno, waterfall</li>
+<li><strong>(1 min)</strong> Limitações e papel do médico; link do GitHub</li>
+</ol>
+<hr />
+<h2>11. Conclusão</h2>
+<p>A Fase 1 entrega um ciclo completo de ML aplicado à saúde da mulher: exploração, pré-processamento com <code>Pipeline</code>, três classificadores, métricas alinhadas ao custo clínico do falso negativo, explicabilidade (importance + SHAP) e uma interface de demonstração. O artefato é uma <strong>base</strong> de suporte à decisão, não um dispositivo diagnóstico.</p></body></html>

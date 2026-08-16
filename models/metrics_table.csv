@@ -1,0 +1,4 @@
+modelo,accuracy,recall_maligno,precision_maligno,f1_maligno,roc_auc
+Regressão logística,0.9737,0.9524,0.9756,0.9639,0.9954
+Random Forest,0.9737,0.9286,1.0,0.963,0.9983
+KNN,0.9386,0.8571,0.973,0.9114,0.9825
